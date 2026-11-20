@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := "5.5"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
+ScriptVersion := "5.1"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
@@ -206,6 +206,7 @@ else if (MacroActive != "")
     try IniWrite(MacroActive, IniFile, "maps", "Macro_" . CurMap)
 MacroLoaded := ""
 MacroPlaying := false
+ForceLink := false                  ; true for the one rejoin started by hand ("Rejoin now"): its first step is always the game link
 MacroEv := []
 MacroDur := 0
 MacroLoop := true
@@ -6149,7 +6150,7 @@ RejoinSequence(expectDialogFirst) {
 ; All positions are for a 1920x1080 screen, like the rest of this script.
 
 AutoRejoinOnce() {
-    global RejoinTimeoutSeconds, HomeTileX, HomeTileY, runStart, GamePlaceId
+    global RejoinTimeoutSeconds, HomeTileX, HomeTileY, runStart, GamePlaceId, ForceLink
     RejoinLog("Automatic rejoin started")
     StopMainHard()                         ; the main macro must be OFF: it would click on its own
     st := Map("typed", 0, "typeTries", 0, "dlg", 0, "vip", 0, "rounds", 0, "starts", 0, "modFail", 0, "enter", false, "mods", (ModSkip || (ModifiersWanted.Length = 0 && !ModExact)), "iconMiss", 0, "noCreate", 0, "raidCreated", 0, "rl", 0)
@@ -6158,10 +6159,12 @@ AutoRejoinOnce() {
     lastScr := ""
     sameSince := A_TickCount
     lastFocus := 0
+    force := ForceLink                     ; set by "Rejoin now" / Ctrl+Shift+F10: you asked for it, so the game link ALWAYS fires first
+    ForceLink := false
     scr0 := ""
-    if (WinMode && GamePlaceId != "" && RobloxRunning())
+    if (!force && WinMode && GamePlaceId != "" && RobloxRunning())
         try scr0 := DetectScreen()
-    if (scr0 = "home" || scr0 = "search" || scr0 = "gamepage" || scr0 = "dialog") {     ; only when Roblox is NOT in AOTR yet: a recognised AOTR screen (lobby, menu ...) is never restarted
+    if (GamePlaceId != "" && RobloxRunning() && (force || scr0 = "home" || scr0 = "search" || scr0 = "gamepage" || scr0 = "dialog")) {     ; only when Roblox is NOT in AOTR yet: a recognised AOTR screen (lobby, menu ...) is never restarted
         st["deep"] := true
         st["deepT"] := A_TickCount
         RejoinLog("rejoin: starting AOTR with its game link (start of the attempt)")
@@ -8053,10 +8056,11 @@ CalibrateLeave() {
 
 ; Ctrl+Shift+F10 = run the whole automatic rejoin from whatever screen is showing now
 TestAutoRejoin() {
-    global busyReconnect
+    global busyReconnect, ForceLink
     if busyReconnect
         return
     busyReconnect := true
+    ForceLink := true
     ok := false
     try ok := AutoRejoinOnce()
     busyReconnect := false
