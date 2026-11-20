@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := "5.1"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
+ScriptVersion := "5.2"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
