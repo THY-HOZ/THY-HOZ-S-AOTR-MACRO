@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := "5.3"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
+ScriptVersion := "5.1"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
@@ -6187,7 +6187,7 @@ AutoRejoinOnce() {
             ToolTip("Rejoin: " scr, TipX(), TipY(70))
             lastScr := scr
             sameSince := A_TickCount
-            for k in ["t_home", "t_card", "t_type", "t_page", "t_slots", "t_play", "t_codes", "t_daily", "t_custom", "t_popup", "t_lobby", "t_modes", "t_map", "t_create", "t_back", "t_join", "t_match", "t_oth", "t_rl"]
+            for k in ["t_home", "t_card", "t_type", "t_page", "t_slots", "t_play", "t_codes", "t_daily", "t_custom", "t_popup", "t_lobby", "t_modes", "t_oth", "t_rl"]   ; (NOT the raid / lobby / modifiers clicks: a flicker between those screens must never click MODIFIERS or BACK twice)
                 if st.Has(k)
                     st.Delete(k)           ; a new screen = the click worked: do the next step at once, no waiting
         }
@@ -6388,7 +6388,8 @@ AutoRejoinOnce() {
                     t0 := A_TickCount
                     while (A_TickCount - t0 < 2500) {         ; leave the moment the lobby is gone
                         Sleep 120
-                        if (DetectScreen() != "matchlobby") {
+                        sc2 := DetectScreen()
+                        if (sc2 != "matchlobby" && sc2 != "modifiers") {   ; (the MODIFIERS box open = START did not work)
                             started := true
                             break
                         }
