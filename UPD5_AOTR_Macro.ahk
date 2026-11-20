@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := "5.6"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
+ScriptVersion := "5.1"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
@@ -6164,7 +6164,10 @@ AutoRejoinOnce() {
     scr0 := ""
     if (!force && WinMode && GamePlaceId != "" && RobloxRunning())
         try scr0 := DetectScreen()
-    if (GamePlaceId != "" && RobloxRunning() && (force || scr0 = "home" || scr0 = "search" || scr0 = "gamepage" || scr0 = "dialog")) {     ; only when Roblox is NOT in AOTR yet: a recognised AOTR screen (lobby, menu ...) is never restarted
+    ; Screens that can only be AOTR's lobby area: there the game is never restarted. Anything else (home, another game's page that
+    ; looks like AOTR's menu, a dialog, unknown ...) starts with the game link.
+    strong := (scr0 = "lobby" || scr0 = "modes" || scr0 = "lobbies" || scr0 = "raid" || scr0 = "raidok" || scr0 = "map" || scr0 = "mapok" || scr0 = "mapwrong" || scr0 = "matchlobby" || scr0 = "modifiers")
+    if (GamePlaceId != "" && RobloxRunning() && (force || (WinMode && !strong))) {     ; only when Roblox is NOT in AOTR yet: a recognised AOTR screen (lobby, menu ...) is never restarted
         st["deep"] := true
         st["deepT"] := A_TickCount
         RejoinLog("rejoin: starting AOTR with its game link (start of the attempt)")
@@ -6236,6 +6239,14 @@ AutoRejoinOnce() {
                 return FinishRejoin()
             st.Delete("jc")
             continue
+        }
+        if (GamePlaceId != "" && WinMode && (scr = "menu" || scr = "slots" || scr = "other" || scr = "popup" || scr = "vip" || scr = "home" || scr = "search" || scr = "gamepage")
+            && A_TickCount - sameSince > 20000 && A_TickCount - (st.Has("deepT") ? st["deepT"] : 0) > 25000 && RobloxRunning()) {
+            ; the same screen for 20 s with no progress: it may be another game that looks like AOTR's menu. The game link fixes that.
+            st["deep"] := true
+            st["deepT"] := A_TickCount
+            RejoinLog("rejoin: no progress on '" scr "' for 20 s: starting AOTR with its game link again")
+            try Run("roblox://experiences/start?placeId=" GamePlaceId)
         }
         if (A_TickCount - sameSince > limit) {
             RejoinLog("stuck on screen '" scr "' for " (limit // 1000) " s, giving up this attempt")
