@@ -23,7 +23,6 @@ ScriptVersion := 5                                 ; this script is UPDATE 5 (th
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
-;  Test
 ;  BUILT-IN MACRO: F10 records your keys, F8 plays / stops them (loops). Presets by name (Outskirts, Female Titan ...).
 ;  Switch on "Built-in macro (no TinyTask)" in the app; TinyTask is then not needed.
 ; =====================================================================
@@ -3297,19 +3296,47 @@ UpdateAuto() {
     UpdateCheck(false)
 }
 
-UpdateFetchNumber() {
-    global UpdateVerUrl
-    tmp := A_Temp "otr_version.txt"
-    n := 0
+; Gets a web page as text. Tries Windows' own HTTP object first, then Download. Returns "" and sets err when both fail.
+UpdateGet(url, &err) {
+    err := ""
+    txt := ""
     try {
-        try FileDelete(tmp)
-        Download(UpdateVerUrl "?t=" A_TickCount, tmp)
-        txt := Trim(FileRead(tmp), " `t`r`n" Chr(0xFEFF))
-        if RegExMatch(txt, "^\d{1,4}$")
-            n := Integer(txt)
-        try FileDelete(tmp)
+        h := ComObject("WinHttp.WinHttpRequest.5.1")
+        h.SetTimeouts(8000, 8000, 15000, 15000)
+        h.Open("GET", url "?t=" A_TickCount, false)
+        h.SetRequestHeader("User-Agent", "AOTR-Macro-Updater")
+        h.Send()
+        if (h.Status = 200) {
+            txt := h.ResponseText
+            return txt
+        }
+        err := "HTTP " h.Status
+    } catch as e {
+        err := "WinHttp: " e.Message
     }
-    return n
+    try {
+        tmp := A_Temp "\aotr_dl.tmp"
+        try FileDelete(tmp)
+        Download(url, tmp)
+        txt := FileRead(tmp, "UTF-8")
+        try FileDelete(tmp)
+        err := ""
+        return txt
+    } catch as e2 {
+        err .= " | Download: " e2.Message
+    }
+    return ""
+}
+
+UpdateFetchNumber(&err) {
+    global UpdateVerUrl
+    txt := Trim(UpdateGet(UpdateVerUrl, &err), " `t`r`n" Chr(0xFEFF))
+    if (txt = "")
+        return 0
+    if RegExMatch(txt, "^\d{1,4}$")
+        return Integer(txt)
+    err := "version.txt must contain only a number, it says: " SubStr(txt, 1, 40)
+    return 0
 }
 
 UpdateCheck(manual := false) {
@@ -3318,11 +3345,13 @@ UpdateCheck(manual := false) {
     if busy
         return
     busy := true
-    newV := UpdateFetchNumber()
+    err := ""
+    newV := UpdateFetchNumber(&err)
     busy := false
     if (newV = 0) {
+        RejoinLog("update check failed: " err)
         if manual
-            MsgBox("Could not check for updates. Check your internet and try again.", "THY HOZ's AOTR MACRO", "Icon! 4096")
+            MsgBox("Could not check for updates.`n`nReason: " err "`n`nCheck your internet and try again.", "THY HOZ's AOTR MACRO", "Icon! 4096")
         return
     }
     if (newV <= ScriptVersion) {
@@ -3339,18 +3368,28 @@ UpdateInstall(newV) {
     global UpdateScriptUrl
     nf := A_ScriptFullPath ".new"
     ok := false
+    why := "the download failed."
     try {
         try FileDelete(nf)
-        Download(UpdateScriptUrl "?t=" A_TickCount, nf)
-        if (FileGetSize(nf) > 100000) {
-            body := FileRead(nf, "UTF-8")
-            if (InStr(body, "ScriptVersion := " newV) && InStr(body, "#Requires AutoHotkey v2.0") && InStr(body, "; END OF SCRIPT"))
-                ok := true
+        err := ""
+        body := UpdateGet(UpdateScriptUrl, &err)
+        if (StrLen(body) <= 100000)
+            why := "the download is too small or empty (" StrLen(body) " characters). " err
+        else if !InStr(body, "ScriptVersion := " newV)
+            why := "the script on GitHub does not say 'ScriptVersion := " newV "' near the top. Change that number in the script, upload it again, and keep version.txt the same."
+        else if !InStr(body, "; END OF SCRIPT")
+            why := "the download was cut off (the end marker is missing)."
+        else if !InStr(body, "#Requires AutoHotkey v2.0")
+            why := "the file on GitHub is not the macro script."
+        else {
+            FileAppend(body, nf, "UTF-8-RAW")
+            ok := true
         }
     }
     if !ok {
         try FileDelete(nf)
-        MsgBox("The update could not be downloaded completely. Nothing was changed.`n`nTry again in a minute.", "THY HOZ's AOTR MACRO", "Icon! 4096")
+        RejoinLog("update not installed: " why)
+        MsgBox("The update was not installed. Nothing was changed.`n`nReason: " why, "THY HOZ's AOTR MACRO", "Icon! 4096")
         return
     }
     try FileCopy(A_ScriptFullPath, A_ScriptFullPath ".bak", 1)
