@@ -3296,6 +3296,19 @@ UpdateAuto() {
     UpdateCheck(false)
 }
 
+; The automatic look never opens a window (it would take the keyboard focus, and F1 etc. would go to it): a short tooltip, and the
+; "Check for updates" button in Settings tells you. The question only opens when you click that button.
+UpdateNotice(newV) {
+    global AppCtl
+    try {
+        AppCtl["upd_btn"].Text := "UPDATE " newV " is available - click to install"
+        AppCtl["upd_btn"].SetFont("s9 Bold cE9B44C", "Segoe UI Semibold")
+    }
+    ToolTip("UPDATE " newV " is available (Settings > Check for updates)", TipX(), TipY(40))
+    SetTimer(() => ToolTip(), -7000)
+    RejoinLog("update " newV " is available (shown quietly)")
+}
+
 ; Gets a web page as text. Tries Windows' own HTTP object first, then Download. Returns "" and sets err when both fail.
 UpdateGet(url, &err) {
     err := ""
@@ -3357,6 +3370,10 @@ UpdateCheck(manual := false) {
     if (newV <= ScriptVersion) {
         if manual
             MsgBox("You have the newest version (UPDATE " ScriptVersion ").", "THY HOZ's AOTR MACRO", "Iconi 4096")
+        return
+    }
+    if !manual {
+        UpdateNotice(newV)
         return
     }
     r := MsgBox("UPDATE " newV " is available (you have UPDATE " ScriptVersion ").`n`nUpdate now? The macro restarts by itself.", "THY HOZ's AOTR MACRO", "YesNo Iconi 4096")
@@ -3705,7 +3722,7 @@ BuildSettings() {
     AppCtl["heal"] := hc
     fc := g.AddCheckbox("xm y+8 w340 cE8EAF0 " (FritzRevive ? "Checked" : ""), "I play Fritz (has revives): restart the macro 1.5 s after YOU DIED")
     AppCtl["fritz"] := fc
-    SBtn(g, "Check for updates (you have UPDATE " ScriptVersion ")", "xm y+18 w340 h34", () => UpdateCheck(true))
+    AppCtl["upd_btn"] := SBtn(g, "Check for updates (you have UPDATE " ScriptVersion ")", "xm y+18 w340 h34", () => UpdateCheck(true))
     SBtn(g, "Ping options (what pings you)", "xm y+10 w340 h34", () => PingPicker())
     SBtn(g, "Save diagnostics (for support)", "xm y+10 w340 h34", () => SaveDiagnostics())
     SBtn(g, "Pin window here", "xm y+10 w165 h34", () => PinHere())
@@ -3722,6 +3739,7 @@ SBtn(g, txt, opt, fn) {
     c.SetFont("s9 Norm cE8EAF0", "Segoe UI Semibold")
     c.OnEvent("Click", (*) => fn())
     BtnMap[c.Hwnd] := [c, "232734", "2E3345"]
+    return c
 }
 
 SField(g, label, key, val, opt := "") {
