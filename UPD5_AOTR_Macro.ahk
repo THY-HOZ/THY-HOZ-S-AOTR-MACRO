@@ -18,6 +18,10 @@ ListLines(false)                                   ; no line logging: slightly f
 try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keeps up even while Roblox is loading
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
+; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
+ScriptVersion := 5                                 ; this script is UPDATE 5 (the release file on GitHub must say the same number)
+UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
+UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
 ;  BUILT-IN MACRO: F10 records your keys, F8 plays / stops them (loops). Presets by name (Outskirts, Female Titan ...).
 ;  Switch on "Built-in macro (no TinyTask)" in the app; TinyTask is then not needed.
@@ -190,7 +194,7 @@ QsGui := ""
 QsRows := []
 MacroActive := IniRead(IniFile, "macros", "Active", "")
 ; Missions and raids. [name, kind, available]. An entry with false says "Coming Soon" in the picker.
-MapList := [["Outskirts", "Normal mission", true], ["Utgard", "Normal mission", true], ["Shiganshina", "Normal mission", true], ["Forest", "Normal mission", true], ["Attack Titan", "Raid", true], ["Female Titan", "Raid", true], ["Colossal Titan", "Raid", true]]
+MapList := [["Outskirts", "Normal mission", true], ["Utgard", "Normal mission", true], ["Shiganshina", "Normal mission", true], ["Forest", "Normal mission", true], ["Attack Titan", "Raid", true], ["Female Titan", "Raid", true], ["Colossal Titan", "Raid", false]]
 CurMap := IniRead(IniFile, "maps", "Active", "Outskirts")
 if !MapAvail(CurMap)
     CurMap := "Outskirts"
@@ -356,6 +360,7 @@ SetTimer(InjuryTick, 300)
 SetTimer(DeathTick, 250)
 SetTimer(PromptTick, 600)
 SetTimer(DpiWarn, -3000)
+SetTimer(UpdateAuto, -8000)         ; a quiet look for a new release a few seconds after the start
 
 F6::Calibrate()
 F5::TestHere()
@@ -3278,8 +3283,88 @@ QsTick() {
 }
 
 ; Text for the "What's new" box on the left panel. Edit this when you ship an update.
+; ===================== UPDATES =====================
+; The version number on the page is compared with ScriptVersion. A newer one: the person is asked, the new script is downloaded next to
+; this one, checked (size, version number, and the end marker, so a cut-off download is never used), the old script is kept as a
+; .bak copy, and the macro restarts. Any problem along the way leaves the current script as it is.
+UpdateAuto() {
+    global busyReconnect, MacroPlaying
+    if (busyReconnect || MacroPlaying) {
+        SetTimer(UpdateAuto, -300000)             ; busy playing: look again in 5 minutes
+        return
+    }
+    UpdateCheck(false)
+}
+
+UpdateFetchNumber() {
+    global UpdateVerUrl
+    tmp := A_Temp "otr_version.txt"
+    n := 0
+    try {
+        try FileDelete(tmp)
+        Download(UpdateVerUrl "?t=" A_TickCount, tmp)
+        txt := Trim(FileRead(tmp), " `t`r`n" Chr(0xFEFF))
+        if RegExMatch(txt, "^\d{1,4}$")
+            n := Integer(txt)
+        try FileDelete(tmp)
+    }
+    return n
+}
+
+UpdateCheck(manual := false) {
+    global ScriptVersion
+    static busy := false
+    if busy
+        return
+    busy := true
+    newV := UpdateFetchNumber()
+    busy := false
+    if (newV = 0) {
+        if manual
+            MsgBox("Could not check for updates. Check your internet and try again.", "THY HOZ's AOTR MACRO", "Icon! 4096")
+        return
+    }
+    if (newV <= ScriptVersion) {
+        if manual
+            MsgBox("You have the newest version (UPDATE " ScriptVersion ").", "THY HOZ's AOTR MACRO", "Iconi 4096")
+        return
+    }
+    r := MsgBox("UPDATE " newV " is available (you have UPDATE " ScriptVersion ").`n`nUpdate now? The macro restarts by itself.", "THY HOZ's AOTR MACRO", "YesNo Iconi 4096")
+    if (r = "Yes")
+        UpdateInstall(newV)
+}
+
+UpdateInstall(newV) {
+    global UpdateScriptUrl
+    nf := A_ScriptFullPath ".new"
+    ok := false
+    try {
+        try FileDelete(nf)
+        Download(UpdateScriptUrl "?t=" A_TickCount, nf)
+        if (FileGetSize(nf) > 100000) {
+            body := FileRead(nf, "UTF-8")
+            if (InStr(body, "ScriptVersion := " newV) && InStr(body, "#Requires AutoHotkey v2.0") && InStr(body, "; END OF SCRIPT"))
+                ok := true
+        }
+    }
+    if !ok {
+        try FileDelete(nf)
+        MsgBox("The update could not be downloaded completely. Nothing was changed.`n`nTry again in a minute.", "THY HOZ's AOTR MACRO", "Icon! 4096")
+        return
+    }
+    try FileCopy(A_ScriptFullPath, A_ScriptFullPath ".bak", 1)
+    try {
+        FileMove(nf, A_ScriptFullPath, 1)
+    } catch {
+        MsgBox("The update could not replace the script file. Nothing was changed.", "THY HOZ's AOTR MACRO", "Icon! 4096")
+        return
+    }
+    RejoinLog("updated to UPDATE " newV ": restarting")
+    Reload()
+}
+
 ChangelogText() {
-    return "UPDATE 4`n`n"
+    return "UPDATE 5`n`n"
         . "NEW`n"
         . "- New look: easier to read, hover any button for help.`n"
         . "- Quick start (top bar): 6 steps with green ticks.`n"
@@ -3290,12 +3375,18 @@ ChangelogText() {
         . "- Injuries: clicks HEAL until none are left, then RETRY.`n"
         . "- Settings: choose how many minutes until stuck.`n"
         . "- Modifiers are saved per mission / raid.`n"
-        . "- UPD5: Duo raids (host or joiner). Colossal Titan raid. Switch texts follow the switch.`n`n"
+        . "- Duo raids (host or joiner), 2nd player check with TAB.`n"
+        . "- Loop macro switch: repeat or fire once.`n"
+        . "- Updates: Settings > Check for updates.`n"
+        . "- Switch texts follow the switch.`n"
+        . "- Colossal Titan: coming soon.`n`n"
         . "FIXED`n"
         . "- RETREAT COMPLETED counts as a fail.`n"
         . "- Works when a button is dark (hovered).`n"
         . "- Rejoin: other Roblox looks, game link fallback.`n"
-        . "- Cutscene skip after a rejoin, more reliable."
+        . "- Cutscene skip more reliable (every cutscene).`n"
+        . "- Rejoin: game link first, faster steps.`n"
+        . "- Raid chests, RETRY with HEAL button, wrong WIN / DEFEAT report."
 }
 
 NewPanel() {
@@ -3574,7 +3665,8 @@ BuildSettings() {
     AppCtl["heal"] := hc
     fc := g.AddCheckbox("xm y+8 w340 cE8EAF0 " (FritzRevive ? "Checked" : ""), "I play Fritz (has revives): restart the macro 1.5 s after YOU DIED")
     AppCtl["fritz"] := fc
-    SBtn(g, "Ping options (what pings you)", "xm y+18 w340 h34", () => PingPicker())
+    SBtn(g, "Check for updates (you have UPDATE " ScriptVersion ")", "xm y+18 w340 h34", () => UpdateCheck(true))
+    SBtn(g, "Ping options (what pings you)", "xm y+10 w340 h34", () => PingPicker())
     SBtn(g, "Save diagnostics (for support)", "xm y+10 w340 h34", () => SaveDiagnostics())
     SBtn(g, "Pin window here", "xm y+10 w165 h34", () => PinHere())
     SBtn(g, "Test webhook", "x+10 w165 h34", () => WebhookTest())
@@ -8195,3 +8287,5 @@ Oz8+ns3OprPlbNa1LVdRnp0dAZ3+f9TE6MBnOfMPAAAAAElFTkSuQmCC
 )"
     return s
 }
+
+; END OF SCRIPT
