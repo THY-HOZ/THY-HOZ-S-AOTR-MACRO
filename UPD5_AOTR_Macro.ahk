@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := 5                                 ; this script is UPDATE 5 (the release file on GitHub must say the same number)
+ScriptVersion := "5.1"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
@@ -2872,6 +2872,8 @@ ChestTick() {
     global WinMode, WW, WX, WY, CurMap, ScriptPaused, busyReconnect, AutoStartEnd, KeyChest
     global ChestLastSeen, ChestLeftN, ChestRightN, ChestClickT
     static lastFinish := 0
+    static seenN := 0                      ; how many looks in a row showed the chests (2 = sure, then the macro is stopped)
+    static stopped := false
     if (!WinMode || WW <= 0 || ScriptPaused || busyReconnect || !AutoStartEnd || !IsRaidMap(CurMap))
         return
     seen := false
@@ -2894,6 +2896,8 @@ ChestTick() {
     now := A_TickCount
     SetTimer(ChestTick, seen ? 50 : 150)   ; quiet while there are no chests: the app's own buttons must stay responsive
     if !seen {
+        seenN := 0
+        stopped := false
         if (ChestLastSeen && now - ChestLastSeen > 25000) {
             ChestLastSeen := 0               ; a new raid: start counting again
             ChestLeftN := 0
@@ -2902,6 +2906,17 @@ ChestTick() {
         return
     }
     ChestLastSeen := now
+    seenN += 1
+    if (seenN >= 2 && !stopped) {          ; the round is over: the macro's keys are useless now, stop it before anything else
+        stopped := true
+        try {
+            if MacroPlaying
+                PlayStop()
+            else
+                StopMainForRetry()         ; TinyTask: F8 if it is running
+        }
+        RejoinLog("chests: macro stopped")
+    }
     if (now - ChestClickT < 800)
         return
     if (leftOn && ChestLeftN < 4) {
@@ -3345,11 +3360,11 @@ UpdateFetchNumber(&err) {
     global UpdateVerUrl
     txt := Trim(UpdateGet(UpdateVerUrl, &err), " `t`r`n" Chr(0xFEFF))
     if (txt = "")
-        return 0
-    if RegExMatch(txt, "^\d{1,4}$")
-        return Integer(txt)
-    err := "version.txt must contain only a number, it says: " SubStr(txt, 1, 40)
-    return 0
+        return ""
+    if RegExMatch(txt, "^\d{1,4}(\.\d{1,3})?$")
+        return txt                         ; kept as text ("5.1"), compared as a number
+    err := "version.txt must contain only a number like 5.1, it says: " SubStr(txt, 1, 40)
+    return ""
 }
 
 UpdateCheck(manual := false) {
@@ -3361,13 +3376,13 @@ UpdateCheck(manual := false) {
     err := ""
     newV := UpdateFetchNumber(&err)
     busy := false
-    if (newV = 0) {
+    if (newV = "") {
         RejoinLog("update check failed: " err)
         if manual
             MsgBox("Could not check for updates.`n`nReason: " err "`n`nCheck your internet and try again.", "THY HOZ's AOTR MACRO", "Icon! 4096")
         return
     }
-    if (newV <= ScriptVersion) {
+    if (Number(newV) <= Number(ScriptVersion)) {
         if manual
             MsgBox("You have the newest version (UPDATE " ScriptVersion ").", "THY HOZ's AOTR MACRO", "Iconi 4096")
         return
@@ -3392,8 +3407,8 @@ UpdateInstall(newV) {
         body := UpdateGet(UpdateScriptUrl, &err)
         if (StrLen(body) <= 100000)
             why := "the download is too small or empty (" StrLen(body) " characters). " err
-        else if !InStr(body, "ScriptVersion := " newV)
-            why := "the script on GitHub does not say 'ScriptVersion := " newV "' near the top. Change that number in the script, upload it again, and keep version.txt the same."
+        else if !InStr(body, "ScriptVersion := " Chr(34) newV Chr(34))
+            why := "the script on GitHub does not say ScriptVersion := " Chr(34) newV Chr(34) " near the top. Change that number in the script, upload it again, and keep version.txt the same."
         else if !InStr(body, "; END OF SCRIPT")
             why := "the download was cut off (the end marker is missing)."
         else if !InStr(body, "#Requires AutoHotkey v2.0")
@@ -3421,7 +3436,7 @@ UpdateInstall(newV) {
 }
 
 ChangelogText() {
-    return "UPDATE 5`n`n"
+    return "UPDATE " ScriptVersion "`n`n"
         . "NEW`n"
         . "- New look: easier to read, hover any button for help.`n"
         . "- Quick start (top bar): 6 steps with green ticks.`n"
