@@ -23,6 +23,7 @@ ScriptVersion := 5                                 ; this script is UPDATE 5 (th
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
+;  Test
 ;  BUILT-IN MACRO: F10 records your keys, F8 plays / stops them (loops). Presets by name (Outskirts, Female Titan ...).
 ;  Switch on "Built-in macro (no TinyTask)" in the app; TinyTask is then not needed.
 ; =====================================================================
