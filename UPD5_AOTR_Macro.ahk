@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := "5.2"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
+ScriptVersion := "5.1"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
@@ -2641,6 +2641,7 @@ InjuryTick() {
     if (!WinMode || WW <= 0 || ScriptPaused || busyReconnect || !AutoStartEnd || !HealInjuries)
         return
     now := A_TickCount
+    SetTimer(InjuryTick, (st = 1) ? 90 : 300)   ; quiet while nothing is wrong, fast while healing
     kind := 0
     row1 := false
     try kind := InjuryLook(&row1)
@@ -2660,7 +2661,7 @@ InjuryTick() {
         }
         return
     }
-    if (now - lastClick < 650)
+    if (now - lastClick < 220)
         return
     if (kind = 1 || kind = 2) {
         if (clicks >= 16) {                       ; healing does not work: just retry
@@ -2680,7 +2681,7 @@ InjuryTick() {
         }
         clicks += 1
         lastClick := now
-        ClickAt(WX + 275, WY + 483)
+        HealClick(WX + 275, WY + 483)
         return
     }
     if (kind = 3) {
@@ -2701,7 +2702,7 @@ InjuryTick() {
             }
             clicks += 1
             lastClick := now
-            ClickAt(WX + 507, WY + 215)
+            HealClick(WX + 507, WY + 215)
             return
         }
         emptyN += 1
@@ -2719,10 +2720,24 @@ InjuryTick() {
         if (blind < 3) {
             blind += 1
             lastClick := now
-            ClickAt(WX + 507, WY + 215)
+            HealClick(WX + 507, WY + 215)
         } else if (blind >= 3 && now - lastClick > 2500) {
             st := 0
         }
+    }
+}
+
+; A click for the healing buttons. The same spot is clicked again and again: when the mouse is already there the hover is done, so only
+; the press is needed (about 55 ms instead of ~250 ms). From anywhere else the normal click with a hover is used.
+HealClick(x, y) {
+    MouseGetPos(&mx, &my)
+    if (Abs(mx - x) <= 3 && Abs(my - y) <= 3) {
+        Click "Down"
+        Sleep 20
+        Click "Up"
+        Sleep 20
+    } else {
+        ClickAt(x, y)
     }
 }
 
