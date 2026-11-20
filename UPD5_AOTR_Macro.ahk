@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := "5.4"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
+ScriptVersion := "5.1"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
@@ -2751,6 +2751,16 @@ ChestsOk(gr) {
     }
     if (t < 6)
         return false
+    ; ... the dark red background between the chests. A bright flash over the whole screen (a titan transformation, a nuke) turns the
+    ; gold points on as well, but never leaves this background dark.
+    dk := 0
+    for q in [[300, 180], [500, 180], [400, 300], [400, 400], [600, 200], [200, 200]] {
+        c := GrabPx(gr, WX + q[1], WY + q[2])
+        if (((c >> 16) & 0xFF) < 130 && ((c >> 8) & 0xFF) < 80)
+            dk += 1
+    }
+    if (dk < 5)
+        return false
     ; ... and the FINISH button at the bottom
     b := 0
     for y in [600, 617] {
@@ -2887,7 +2897,7 @@ ChestTick() {
     global WinMode, WW, WX, WY, CurMap, ScriptPaused, busyReconnect, AutoStartEnd, KeyChest
     global ChestLastSeen, ChestLeftN, ChestRightN, ChestClickT
     static lastFinish := 0
-    static seenN := 0                      ; how many looks in a row showed the chests (2 = sure, then the macro is stopped)
+    static seenN := 0                      ; how many looks in a row showed the chests (4 in a row = sure, then the macro is stopped)
     static stopped := false
     if (!WinMode || WW <= 0 || ScriptPaused || busyReconnect || !AutoStartEnd || !IsRaidMap(CurMap))
         return
@@ -2922,7 +2932,7 @@ ChestTick() {
     }
     ChestLastSeen := now
     seenN += 1
-    if (seenN >= 2 && !stopped) {          ; the round is over: the macro's keys are useless now, stop it before anything else
+    if (seenN >= 4 && !stopped) {          ; the round is over: the macro's keys are useless now, stop it before anything else
         stopped := true
         try {
             if MacroPlaying
