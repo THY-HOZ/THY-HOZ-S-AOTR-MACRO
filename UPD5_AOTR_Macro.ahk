@@ -19,7 +19,7 @@ try ProcessSetPriority("High")                     ; the OBJECTIVES watcher keep
 DllCall("winmm\timeBeginPeriod", "UInt", 1)        ; 1 ms timer resolution, so Sleep 1 really is ~1 ms
 OnExit(ReleaseTimer)
 ; ---- updates: the script asks this page for the newest version number (version.txt). A higher number = a new release. ----
-ScriptVersion := "5.7"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
+ScriptVersion := "5.8"                             ; this script is UPDATE 5.1 (a number like 5.1 or 6; version.txt on GitHub holds the newest one)
 UpdateVerUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/version.txt"
 UpdateScriptUrl := "https://raw.githubusercontent.com/THY-HOZ/THY-HOZ-S-AOTR-MACRO/refs/heads/main/UPD5_AOTR_Macro.ahk"
 
@@ -689,8 +689,15 @@ PlayStep() {
     static lastChk := 0
     static lastAct := 0
     static lastSkip := 0
+    static lastChestLook := 0
     if !MacroPlaying
         return
+    if (A_TickCount - lastChestLook >= 60 && IsRaidMap(CurMap)) {   ; raid chests: look from HERE too, so the macro stops the moment they show
+        lastChestLook := A_TickCount
+        try ChestTick()
+        if !MacroPlaying
+            return
+    }
     if (A_TickCount - lastSkip >= 100) {   ; the macro runs through the cutscenes too: skip them from HERE (this timer never gets starved)
         lastSkip := A_TickCount
         try SkipLook()
@@ -2898,10 +2905,19 @@ ChestTick() {
     global WinMode, WW, WX, WY, CurMap, ScriptPaused, busyReconnect, AutoStartEnd, KeyChest
     global ChestLastSeen, ChestLeftN, ChestRightN, ChestClickT
     static lastFinish := 0
-    static seenN := 0                      ; how many looks in a row showed the chests (4 in a row = sure, then the macro is stopped)
+    static busy := false                   ; (PlayStep calls this too: never two at once)
+    static seenN := 0                      ; how many looks in a row showed the chests (2 looks since the last raid = sure, then the macro is stopped; a look without chests does NOT reset it, the chests flicker while they open)
     static stopped := false
-    if (!WinMode || WW <= 0 || ScriptPaused || busyReconnect || !AutoStartEnd || !IsRaidMap(CurMap))
+    if (busy || !WinMode || WW <= 0 || ScriptPaused || busyReconnect || !AutoStartEnd || !IsRaidMap(CurMap))
         return
+    busy := true
+    try ChestTickBody(&seenN, &stopped, &lastFinish)
+    busy := false
+}
+
+ChestTickBody(&seenN, &stopped, &lastFinish) {
+    global WinMode, WW, WX, WY, CurMap, KeyChest
+    global ChestLastSeen, ChestLeftN, ChestRightN, ChestClickT
     seen := false
     leftOn := false
     rightOn := false
@@ -2922,9 +2938,9 @@ ChestTick() {
     now := A_TickCount
     SetTimer(ChestTick, seen ? 50 : 150)   ; quiet while there are no chests: the app's own buttons must stay responsive
     if !seen {
-        seenN := 0
-        stopped := false
         if (ChestLastSeen && now - ChestLastSeen > 25000) {
+            seenN := 0                       ; a new raid: the stop works again
+            stopped := false
             ChestLastSeen := 0               ; a new raid: start counting again
             ChestLeftN := 0
             ChestRightN := 0
@@ -2933,7 +2949,7 @@ ChestTick() {
     }
     ChestLastSeen := now
     seenN += 1
-    if (seenN >= 4 && !stopped) {          ; the round is over: the macro's keys are useless now, stop it before anything else
+    if (seenN >= 1 && !stopped) {          ; the round is over: the macro's keys are useless now, stop it before anything else
         stopped := true
         try {
             if MacroPlaying
@@ -6159,15 +6175,16 @@ AutoRejoinOnce() {
     lastScr := ""
     sameSince := A_TickCount
     lastFocus := 0
-    force := ForceLink                     ; set by "Rejoin now" / Ctrl+Shift+F10: you asked for it, so the game link ALWAYS fires first
-    ForceLink := false
+    ForceLink := false                     ; ("Rejoin now" behaves like an automatic rejoin: it looks at the screen first)
     scr0 := ""
-    if (!force && WinMode && GamePlaceId != "" && RobloxRunning())
+    if (WinMode && GamePlaceId != "" && RobloxRunning())
         try scr0 := DetectScreen()
-    ; Screens that can only be AOTR's lobby area: there the game is never restarted. Anything else (home, another game's page that
-    ; looks like AOTR's menu, a dialog, unknown ...) starts with the game link.
-    strong := (scr0 = "lobby" || scr0 = "modes" || scr0 = "lobbies" || scr0 = "raid" || scr0 = "raidok" || scr0 = "map" || scr0 = "mapok" || scr0 = "mapwrong" || scr0 = "matchlobby" || scr0 = "modifiers")
-    if (GamePlaceId != "" && RobloxRunning() && (force || (WinMode && !strong))) {     ; only when Roblox is NOT in AOTR yet: a recognised AOTR screen (lobby, menu ...) is never restarted
+    ; If the screen is already one of AOTR's own (lobby, raid lists, match lobby, modifiers, slots, menu, VIP box, pop-ups ...), the
+    ; rejoin simply carries on from there: restarting the game would throw that progress away. The game link fires at once only
+    ; when the screen is NOT one of those (Roblox home / search / a game page, an error box, an unknown screen, a match).
+    ; A look-alike screen of another game is caught by the "no progress for 15 s" rule below.
+    flow := (scr0 = "lobby" || scr0 = "modes" || scr0 = "lobbies" || scr0 = "raid" || scr0 = "raidok" || scr0 = "map" || scr0 = "mapok" || scr0 = "mapwrong" || scr0 = "matchlobby" || scr0 = "modifiers" || scr0 = "slots" || scr0 = "menu" || scr0 = "vip" || scr0 = "popup" || scr0 = "daily" || scr0 = "custom")
+    if (GamePlaceId != "" && RobloxRunning() && !flow) {
         st["deep"] := true
         st["deepT"] := A_TickCount
         RejoinLog("rejoin: starting AOTR with its game link (start of the attempt)")
@@ -6241,11 +6258,11 @@ AutoRejoinOnce() {
             continue
         }
         if (GamePlaceId != "" && WinMode && (scr = "menu" || scr = "slots" || scr = "other" || scr = "popup" || scr = "vip" || scr = "home" || scr = "search" || scr = "gamepage")
-            && A_TickCount - sameSince > 20000 && A_TickCount - (st.Has("deepT") ? st["deepT"] : 0) > 25000 && RobloxRunning()) {
-            ; the same screen for 20 s with no progress: it may be another game that looks like AOTR's menu. The game link fixes that.
+            && A_TickCount - sameSince > 15000 && A_TickCount - (st.Has("deepT") ? st["deepT"] : 0) > 25000 && RobloxRunning()) {
+            ; the same screen for 15 s with no progress: it may be another game that looks like AOTR's menu. The game link fixes that.
             st["deep"] := true
             st["deepT"] := A_TickCount
-            RejoinLog("rejoin: no progress on '" scr "' for 20 s: starting AOTR with its game link again")
+            RejoinLog("rejoin: no progress on '" scr "' for 15 s: starting AOTR with its game link again")
             try Run("roblox://experiences/start?placeId=" GamePlaceId)
         }
         if (A_TickCount - sameSince > limit) {
